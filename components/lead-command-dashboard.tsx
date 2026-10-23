@@ -46,6 +46,7 @@ import {
   Megaphone,
   Menu,
   MessageSquare,
+  Network,
   Pause,
   Phone,
   PhoneCall,
@@ -85,6 +86,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { createBrowserClient } from "@/lib/supabase-browser"
 import { BsWealthLockupInline } from "@/components/brand/bs-wealth-mark"
+import { FourCsFrameworkPage } from "@/components/four-cs-framework"
 import { IntroSequence } from "@/components/motion/intro-sequence"
 import { Skeleton, StatSkeletonRow } from "@/components/motion/primitives"
 import { CallLeadButton, QuickCallDialog, callBlockedReason } from "@/components/manual-call"
@@ -3388,7 +3390,7 @@ function AIAgentPage({
 function SettingsPage({ health, onLogout }: { health: any; onLogout: () => void }) {
   const { settings, updateSetting, isLoading } = useSettings()
   const [workspace, setWorkspace] = useState({
-    companyName: "BS Wealth Finance",
+    companyName: "AIOS",
     projectName: "Loan campaign",
     timezone: "Asia/Kolkata",
   })
@@ -4193,6 +4195,7 @@ function UsageBillingPage({ onTopUp }: { onTopUp: () => void }) {
 
 const navItems = [
   { label: "Overview", icon: LayoutDashboard, countKey: null },
+  { label: "4 C's Framework", icon: Network, countKey: null },
   { label: "Leads", icon: Users, countKey: "total" },
   { label: "Calls", icon: PhoneCall, countKey: null },
   { label: "Campaigns", icon: Megaphone, countKey: null },
@@ -4215,7 +4218,7 @@ const systemNavItems = [
 ] as const
 
 /** Where the chosen business line is remembered between visits. */
-const VERTICAL_STORAGE_KEY = "bswealth.vertical"
+const VERTICAL_STORAGE_KEY = "aios.vertical"
 
 /**
  * The business-line switch that scopes the whole dashboard.
@@ -4675,6 +4678,8 @@ export function LeadCommandDashboard() {
 
   const renderPage = () => {
     switch (activeNav) {
+      case "4 C's Framework":
+        return <FourCsFrameworkPage />
       case "Overview":
         return (
           <OverviewPage
@@ -4879,7 +4884,7 @@ export function LeadCommandDashboard() {
             </Avatar>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-sidebar-foreground">Sales Admin</p>
-              <p className="truncate text-xs text-sidebar-foreground/50">BS Wealth Finance</p>
+              <p className="truncate text-xs text-sidebar-foreground/50">AIOS</p>
             </div>
             <Button variant="ghost" size="icon" className="text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground" onClick={handleLogout} aria-label="Sign out">
               <LogOut className="size-4" />
