@@ -16,6 +16,7 @@ import {
   ExternalLink,
   Layers,
   Loader2,
+  Mail,
   Maximize2,
   MessageSquare,
   Minimize2,
@@ -59,24 +60,33 @@ export interface BackgroundTask {
   endTime?: number;
 }
 
+export interface EmailDraft {
+  to: string;
+  subject: string;
+  previewText: string;
+  html: string;
+  status: 'draft' | 'sent';
+}
+
 export interface ChatMessage {
   id: string;
   sender: 'user' | 'assistant';
   text: string;
   timestamp: string;
   task?: BackgroundTask;
+  emailDraft?: EmailDraft;
 }
 
-const STORAGE_KEY_MESSAGES = 'aios.copilot.messages_v1';
-const STORAGE_KEY_TASKS = 'aios.copilot.tasks_v1';
+const STORAGE_KEY_MESSAGES = 'aios.copilot.messages_v2';
+const STORAGE_KEY_TASKS = 'aios.copilot.tasks_v2';
 
 const INITIAL_SUGGESTIONS = [
+  '✉️ Email operations report to my email',
   '⚡ Run full system health diagnostic',
   '🔄 Reconcile unbilled calls & sweep stuck leads',
   '💬 Dispatch WhatsApp follow-up sequence',
   '📊 Analyze lead qualification & objections',
   '🧠 Re-index RAG loan policy vector context',
-  '🧹 Clean expired items from recycle bin',
 ];
 
 export function AiosCopilotChat({
@@ -94,6 +104,7 @@ export function AiosCopilotChat({
   const [activeTab, setActiveTab] = useState<'chat' | 'tasks'>('chat');
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [tasksFilter, setTasksFilter] = useState<'all' | 'running' | 'completed'>('all');
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -109,7 +120,7 @@ export function AiosCopilotChat({
       {
         id: 'msg-welcome',
         sender: 'assistant',
-        text: `Hello! I am your **AIOS Autonomous Operations Copilot**.\n\nYou can prompt me to perform tasks while you manage leads and campaigns. I can run operations **in the background** (system health audits, call sweeps, WhatsApp follow-ups, lead scoring, and RAG vector syncing).\n\nWhat would you like me to work on?`,
+        text: `Hello! I am your **AIOS Autonomous Operations Copilot**.\n\nYou can prompt me to perform background tasks (call sweeps, system audits, lead scoring) or **dispatch executive email reports**.\n\n*Note: I will only send emails when you explicitly ask me to and confirm!*`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ];
@@ -170,7 +181,6 @@ export function AiosCopilotChat({
 
           const currentStep = task.steps[task.currentStepIndex];
           if (!currentStep) {
-            // Task completed!
             toast.success(`Background Task "${task.name}" completed successfully!`, {
               description: task.outputSummary || 'Execution finished with 0 errors.',
               action: {
@@ -190,7 +200,6 @@ export function AiosCopilotChat({
             };
           }
 
-          // Advance step or progress
           const updatedSteps = [...task.steps];
           updatedSteps[task.currentStepIndex] = {
             ...currentStep,
@@ -222,7 +231,6 @@ export function AiosCopilotChat({
             };
           }
 
-          // Mark next step as running
           updatedSteps[nextIndex] = {
             ...updatedSteps[nextIndex],
             status: 'running',
@@ -307,7 +315,6 @@ export function AiosCopilotChat({
           startTime: Date.now(),
         };
 
-        // Add to global background tasks list
         setTasks((prev) => [assignedTask!, ...prev]);
 
         toast.info(`Task [${assignedTask.name}] running in background...`, {
@@ -321,6 +328,7 @@ export function AiosCopilotChat({
         text: data.reply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         task: assignedTask,
+        emailDraft: data.emailDraft,
       };
 
       setMessages((prev) => [...prev, botMessage]);
@@ -336,6 +344,63 @@ export function AiosCopilotChat({
       ]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSendEmail = async (draft: EmailDraft) => {
+    setIsSendingEmail(true);
+    toast.info(`Transmitting email to ${draft.to}...`);
+
+    try {
+      const res = await fetch('/api/ai/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: draft.to,
+          subject: draft.subject,
+          html: draft.html,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        toast.success(data.message || `Email sent successfully to ${draft.to}!`);
+        // Update draft status to sent in chat
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.emailDraft?.to === draft.to
+              ? { ...m, emailDraft: { ...m.emailDraft, status: 'sent' } }
+              : m
+          )
+        );
+
+        // Add email dispatch task
+        const emailTask: BackgroundTask = {
+          id: `TSK-${Math.floor(1000 + Math.random() * 9000)}`,
+          name: `Email Dispatch to ${draft.to}`,
+          type: 'email_dispatch',
+          description: `Dispatched operational email report to ${draft.to}`,
+          status: 'completed',
+          progress: 100,
+          currentStepIndex: 2,
+          totalSteps: 2,
+          steps: [
+            { title: 'Rendered responsive email template', log: 'Built HTML report', durationMs: 400, status: 'completed' },
+            { title: `Delivered via ${data.provider || 'gateway'}`, log: data.message || 'Transmitted', durationMs: 600, status: 'completed' },
+          ],
+          outputSummary: `Delivered to ${draft.to}`,
+          startTime: Date.now() - 1000,
+          endTime: Date.now(),
+        };
+        setTasks((prev) => [emailTask, ...prev]);
+      } else {
+        toast.error(data.error || 'Failed to dispatch email.');
+      }
+    } catch (err: any) {
+      toast.error('Network error dispatching email.');
+    } finally {
+      setIsSendingEmail(false);
     }
   };
 
@@ -391,7 +456,6 @@ export function AiosCopilotChat({
       {/* ─── 1. FLOATING LAUNCHER PILL / BUTTON ───────────────────── */}
       {!isOpen && (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
-          {/* Active running task miniature status pill */}
           {currentRunningTask && (
             <div
               onClick={() => {
@@ -414,7 +478,6 @@ export function AiosCopilotChat({
             </div>
           )}
 
-          {/* Launcher Button */}
           <Button
             onClick={() => {
               setIsOpen(true);
@@ -518,7 +581,6 @@ export function AiosCopilotChat({
                 </div>
               )}
 
-              {/* Minimize / Expand / Close */}
               <Button
                 variant="ghost"
                 size="icon"
@@ -556,13 +618,12 @@ export function AiosCopilotChat({
             </div>
           </div>
 
-          {/* Body Content (only visible when not minimized) */}
+          {/* Body Content */}
           {!isMinimized && (
             <div className="flex flex-1 flex-col overflow-hidden">
               {/* ─── TAB 1: CHAT ────────────────────────────────────── */}
               {activeTab === 'chat' && (
                 <div className="flex flex-1 flex-col overflow-hidden">
-                  {/* Messages Scroll Area */}
                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {messages.map((msg) => (
                       <div
@@ -580,7 +641,6 @@ export function AiosCopilotChat({
                               : 'bg-muted/70 text-foreground border border-border/70 rounded-bl-xs'
                           )}
                         >
-                          {/* Markdown formatted text */}
                           <div className="whitespace-pre-wrap font-sans space-y-1.5">
                             {msg.text.split('\n\n').map((paragraph, pIdx) => (
                               <p key={pIdx}>
@@ -597,7 +657,69 @@ export function AiosCopilotChat({
                             ))}
                           </div>
 
-                          {/* Live Background Task Card (if task attached to message) */}
+                          {/* Email Preview & Confirmation Card */}
+                          {msg.emailDraft && (
+                            <div className="mt-3 overflow-hidden rounded-xl border border-primary/40 bg-card p-3.5 text-foreground shadow-sm">
+                              <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                                <div className="flex items-center gap-1.5 font-semibold text-xs text-primary">
+                                  <Mail className="size-3.5" />
+                                  <span>Operational Email Dispatch</span>
+                                </div>
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    'text-[10px]',
+                                    msg.emailDraft.status === 'sent'
+                                      ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                                      : 'border-primary/40 text-primary'
+                                  )}
+                                >
+                                  {msg.emailDraft.status === 'sent' ? 'Sent' : 'Approval Required'}
+                                </Badge>
+                              </div>
+
+                              <div className="mt-2.5 space-y-1.5 text-[11px]">
+                                <div className="flex items-center gap-1.5 text-muted-foreground">
+                                  <span className="font-medium text-foreground">To:</span>
+                                  <span className="font-mono bg-muted/60 px-1.5 py-0.5 rounded text-foreground font-semibold">
+                                    {msg.emailDraft.to}
+                                  </span>
+                                </div>
+                                <div className="text-muted-foreground">
+                                  <span className="font-medium text-foreground">Subject:</span> {msg.emailDraft.subject}
+                                </div>
+                              </div>
+
+                              <div className="mt-2.5 rounded-lg bg-muted/50 p-2.5 text-[10.5px] border border-border/50 text-muted-foreground leading-relaxed">
+                                {msg.emailDraft.previewText}
+                              </div>
+
+                              {msg.emailDraft.status === 'draft' && (
+                                <div className="mt-3 flex items-center justify-between gap-2 pt-2 border-t border-border/40">
+                                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                    <AlertCircle className="size-3 text-amber-500" /> Only sends upon your click
+                                  </span>
+                                  <Button
+                                    size="sm"
+                                    className="h-7 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                                    onClick={() => handleSendEmail(msg.emailDraft!)}
+                                    disabled={isSendingEmail}
+                                  >
+                                    {isSendingEmail ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />}
+                                    Send Email Now
+                                  </Button>
+                                </div>
+                              )}
+
+                              {msg.emailDraft.status === 'sent' && (
+                                <div className="mt-2.5 flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                  <CheckCircle2 className="size-3.5" /> Dispatched successfully to {msg.emailDraft.to}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Live Background Task Card */}
                           {msg.task && (
                             <div className="mt-3 overflow-hidden rounded-xl border border-primary/30 bg-card p-3 text-foreground shadow-sm">
                               <div className="flex items-center justify-between gap-2 pb-2 border-b border-border/60">
@@ -633,7 +755,6 @@ export function AiosCopilotChat({
                                 {msg.task.description}
                               </p>
 
-                              {/* Progress bar */}
                               <div className="mt-2.5 space-y-1">
                                 <div className="flex justify-between text-[10px] font-mono text-muted-foreground">
                                   <span>Step {Math.min(msg.task.currentStepIndex + 1, msg.task.totalSteps)} of {msg.task.totalSteps}</span>
@@ -642,7 +763,6 @@ export function AiosCopilotChat({
                                 <Progress value={msg.task.progress} className="h-1.5" />
                               </div>
 
-                              {/* Terminal Step Logs */}
                               <div className="mt-3 rounded-lg bg-muted/60 p-2 font-mono text-[10px] space-y-1.5 max-h-32 overflow-y-auto border border-border/50">
                                 {msg.task.steps.map((step, sIdx) => (
                                   <div key={sIdx} className="flex items-start gap-1.5">
@@ -667,7 +787,6 @@ export function AiosCopilotChat({
                                 ))}
                               </div>
 
-                              {/* Output summary when done */}
                               {msg.task.status === 'completed' && msg.task.outputSummary && (
                                 <div className="mt-2 rounded-lg bg-emerald-500/5 p-2 text-[10.5px] border border-emerald-500/20 text-emerald-700 dark:text-emerald-300">
                                   <strong>Result:</strong> {msg.task.outputSummary}
@@ -685,7 +804,7 @@ export function AiosCopilotChat({
                     {isLoading && (
                       <div className="flex items-center gap-2 rounded-2xl bg-muted/70 p-3 text-xs text-muted-foreground w-fit border border-border/60">
                         <Loader2 className="size-3.5 animate-spin text-primary" />
-                        <span>AIOS Copilot is formulating background task...</span>
+                        <span>AIOS Copilot is formulating task...</span>
                       </div>
                     )}
 
@@ -734,7 +853,7 @@ export function AiosCopilotChat({
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Type a task or question... (e.g. 'Reconcile calls in background')"
+                        placeholder="Type a task or ask to send an email... (e.g. 'Email report to me@gmail.com')"
                         className="w-full resize-none rounded-xl border border-input bg-background p-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                         disabled={isLoading}
                       />
@@ -750,7 +869,7 @@ export function AiosCopilotChat({
                     <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground px-1">
                       <span>Press <strong>Enter</strong> to send • <strong>Shift+Enter</strong> for newline</span>
                       <span className="flex items-center gap-1 text-primary">
-                        <Zap className="size-2.5" /> Auto Background Execution
+                        <Mail className="size-2.5" /> Email on Explicit Demand Only
                       </span>
                     </div>
                   </div>
@@ -802,7 +921,6 @@ export function AiosCopilotChat({
                     </div>
                   </div>
 
-                  {/* Tasks List */}
                   <div className="flex-1 overflow-y-auto space-y-3 pr-1">
                     {filteredTasks.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-48 text-center text-xs text-muted-foreground">
@@ -838,7 +956,6 @@ export function AiosCopilotChat({
                             </Badge>
                           </div>
 
-                          {/* Progress */}
                           <div className="space-y-1">
                             <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
                               <span>Progress</span>
@@ -847,7 +964,6 @@ export function AiosCopilotChat({
                             <Progress value={t.progress} className="h-1.5" />
                           </div>
 
-                          {/* Logs accordion */}
                           <div className="rounded-lg bg-muted/60 p-2 font-mono text-[10px] space-y-1 border border-border/40">
                             {t.steps.map((step, idx) => (
                               <div key={idx} className="flex items-center gap-1.5">
@@ -865,7 +981,6 @@ export function AiosCopilotChat({
                             ))}
                           </div>
 
-                          {/* Task Footer / Controls */}
                           <div className="flex items-center justify-between pt-1 text-[10px] text-muted-foreground">
                             <span>Started: {new Date(t.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
 
