@@ -58,6 +58,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  Sparkles,
   Target,
   TrendingUp,
   Upload,
