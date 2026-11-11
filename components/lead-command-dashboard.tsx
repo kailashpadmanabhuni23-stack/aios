@@ -87,6 +87,7 @@ import { cn } from "@/lib/utils"
 import { createBrowserClient } from "@/lib/supabase-browser"
 import { BsWealthLockupInline } from "@/components/brand/bs-wealth-mark"
 import { FourCsFrameworkPage } from "@/components/four-cs-framework"
+import { AiosCopilotChat } from "@/components/aios-copilot-chat"
 import { IntroSequence } from "@/components/motion/intro-sequence"
 import { Skeleton, StatSkeletonRow } from "@/components/motion/primitives"
 import { CallLeadButton, QuickCallDialog, callBlockedReason } from "@/components/manual-call"
@@ -4297,6 +4298,7 @@ export function LeadCommandDashboard() {
   // ignore the dates the client is looking at.
   const [leadDateRange, setLeadDateRange] = useState<DateRange>(EMPTY_RANGE)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [copilotOpen, setCopilotOpen] = useState(false)
   const [topUpOpen, setTopUpOpen] = useState(false)
   const [readNotifs, setReadNotifs] = useState<string[]>([])
   const [isUploading, setIsUploading] = useState(false)
@@ -4966,6 +4968,9 @@ export function LeadCommandDashboard() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              <Button variant="ghost" size="icon" className="relative shrink-0 text-primary" onClick={() => setCopilotOpen(true)} title="AI Copilot">
+                <Sparkles className="size-4" />
+              </Button>
               <Button variant="ghost" size="icon" className="relative shrink-0" onClick={() => setNotifOpen(true)}>
                 <Bell />
                 {unreadCount > 0 && (
@@ -5010,6 +5015,10 @@ export function LeadCommandDashboard() {
               <Button variant="ghost" size="sm" onClick={() => setFeedbackOpen(true)}>
                 <MessageSquare data-icon="inline-start" />
                 Feedback
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setCopilotOpen(true)} className="gap-1.5 border-primary/30 bg-primary/5 text-primary hover:bg-primary/10">
+                <Sparkles className="size-3.5" />
+                <span className="hidden xl:inline">AI Copilot</span>
               </Button>
               <div className="relative">
                 <Button variant="ghost" size="icon" onClick={() => setNotifOpen(true)}>
@@ -5497,6 +5506,8 @@ export function LeadCommandDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AiosCopilotChat vertical={vertical} externalOpen={copilotOpen} onExternalClose={() => setCopilotOpen(false)} />
     </div>
   )
 }
